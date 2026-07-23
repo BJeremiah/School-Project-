@@ -1,0 +1,52 @@
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const pool = require('../config/db');
+
+async function login(req, res) {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    const result = await pool.query(
+      'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
+      [email.toLowerCase().trim()]
+    );
+
+    if (result.rows.length === 0) {
+      // Deliberately generic message — don't reveal whether the
+      // email exists to reduce user-enumeration risk.
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const user = result.rows[0];
+    const passwordMatches = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatches) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+    );
+
+    return res.status(200).json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+}
+
+module.exports = { login };
