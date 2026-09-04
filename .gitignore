@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.local
+school.env
+*.env
+!.env.example
+*.sql
+uploads/
+.expo/
+dist/
+build/
+*.log
