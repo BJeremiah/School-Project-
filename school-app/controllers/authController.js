@@ -11,21 +11,21 @@ async function login(req, res) {
     }
 
     const result = await pool.query(
-      'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
+      'SELECT id, name, email, password_hash, role, is_blocked FROM users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
-
     if (result.rows.length === 0) {
       // Deliberately generic message — don't reveal whether the
       // email exists to reduce user-enumeration risk.
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
-
     const user = result.rows[0];
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
-
     if (!passwordMatches) {
       return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    if (user.is_blocked) {
+      return res.status(403).json({ error: 'This account has been blocked by the Director.' });
     }
 
     const token = jwt.sign(

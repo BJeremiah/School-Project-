@@ -3,18 +3,23 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import AttendanceScreen from './attendance';
+import SubjectsScreen from './subjects';
+import ScoresScreen from './scores';
+import RecordsScreen from './records';
+import { API_URL } from '../config/api';
+import { colors, fonts, fontSizes, radii, spacing } from '../theme/theme';
 
-// IMPORTANT: replace with YOUR computer's IPv4 address (from ipconfig)
-const API_URL = 'http://192.168.163.5:4000';
+type Tab = 'attendance' | 'assessment' | 'records';
+type Subject = { id: string; name: string };
 
 export default function App() {
-  const [token, setToken] = useState(null);
+  const [token, setToken] = useState<string | null>(null);
   const [userName, setUserName] = useState('');
 
   // Login form state
@@ -22,17 +27,9 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
-  // Daily report form state
-  const [presentCount, setPresentCount] = useState('');
-  const [absentCount, setAbsentCount] = useState('');
-  const [tuition, setTuition] = useState('');
-  const [canteen, setCanteen] = useState('');
-  const [bus, setBus] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-
-  const cashTotal =
-    (parseFloat(tuition) || 0) + (parseFloat(canteen) || 0) + (parseFloat(bus) || 0);
+  // Navigation state
+  const [activeTab, setActiveTab] = useState<Tab>('attendance');
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
 
   async function handleLogin() {
     if (!email || !password) {
@@ -54,44 +51,12 @@ export default function App() {
       setToken(data.token);
       setUserName(data.user.name);
     } catch (err) {
-      Alert.alert('Connection error', 'Could not reach the server. Check the API_URL and that your phone is on the same Wi-Fi as your computer.');
+      Alert.alert(
+        'Connection error',
+        'Could not reach the server. Check the API_URL and that your phone is on the same Wi-Fi as your computer.'
+      );
     } finally {
       setLoggingIn(false);
-    }
-  }
-
-  async function handleSubmitReport() {
-    if (!presentCount || !absentCount) {
-      Alert.alert('Missing info', 'Please enter both present and absent counts.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch(`${API_URL}/api/reports/submit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          present_count: parseInt(presentCount, 10),
-          absent_count: parseInt(absentCount, 10),
-          tuition_arrears: parseFloat(tuition) || 0,
-          canteen_fees: parseFloat(canteen) || 0,
-          bus_fares: parseFloat(bus) || 0,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        Alert.alert('Submission failed', data.error || 'Unknown error');
-        return;
-      }
-      setSubmitted(true);
-      Alert.alert('Success', 'Report submitted for today!');
-    } catch (err) {
-      Alert.alert('Connection error', 'Could not reach the server.');
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -115,103 +80,113 @@ export default function App() {
           value={password}
           onChangeText={setPassword}
         />
-        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loggingIn}>
-          {loggingIn ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Log In</Text>}
-        </TouchableOpacity>
+        <Pressable style={styles.loginButton} onPress={handleLogin} disabled={loggingIn}>
+          {loggingIn ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.loginButtonText}>Log In</Text>
+          )}
+        </Pressable>
       </View>
     );
   }
 
-  // --- DAILY REPORT FORM SCREEN ---
+  // --- MAIN APP (logged in) ---
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Welcome, {userName}</Text>
-      <Text style={styles.subtitle}>Today's Report</Text>
+    <View style={{ flex: 1, backgroundColor: colors.cloud }}>
+      <View style={{ flex: 1 }}>
+        {activeTab === 'attendance' && <AttendanceScreen token={token} />}
 
-      <Text style={styles.label}>Attendance</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Present Count"
-        keyboardType="numeric"
-        value={presentCount}
-        onChangeText={setPresentCount}
-        editable={!submitted}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Absent Count"
-        keyboardType="numeric"
-        value={absentCount}
-        onChangeText={setAbsentCount}
-        editable={!submitted}
-      />
-
-      <Text style={styles.label}>Cash Received Today (GHS)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Tuition / Arrears"
-        keyboardType="numeric"
-        value={tuition}
-        onChangeText={setTuition}
-        editable={!submitted}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Canteen / Feeding"
-        keyboardType="numeric"
-        value={canteen}
-        onChangeText={setCanteen}
-        editable={!submitted}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Bus / Transport"
-        keyboardType="numeric"
-        value={bus}
-        onChangeText={setBus}
-        editable={!submitted}
-      />
-
-      <Text style={styles.totalText}>Total: GHS {cashTotal.toFixed(2)}</Text>
-
-      <TouchableOpacity
-        style={[styles.button, submitted && styles.buttonDisabled]}
-        onPress={handleSubmitReport}
-        disabled={submitting || submitted}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>{submitted ? 'Submitted for Today' : 'Submit'}</Text>
+        {activeTab === 'assessment' && !selectedSubject && (
+          <SubjectsScreen token={token} onSelectSubject={setSelectedSubject} />
         )}
-      </TouchableOpacity>
-    </ScrollView>
+
+        {activeTab === 'assessment' && selectedSubject && (
+          <ScoresScreen
+            token={token}
+            subjectId={selectedSubject.id}
+            subjectName={selectedSubject.name}
+            onBack={() => setSelectedSubject(null)}
+          />
+        )}
+
+        {activeTab === 'records' && <RecordsScreen token={token} />}
+      </View>
+
+      <View style={styles.tabBar}>
+        <TabButton
+          label="Attendance"
+          active={activeTab === 'attendance'}
+          onPress={() => setActiveTab('attendance')}
+        />
+        <TabButton
+          label="Assessment"
+          active={activeTab === 'assessment'}
+          onPress={() => {
+            setActiveTab('assessment');
+            setSelectedSubject(null);
+          }}
+        />
+        <TabButton
+          label="Records"
+          active={activeTab === 'records'}
+          onPress={() => setActiveTab('records')}
+        />
+      </View>
+    </View>
+  );
+}
+
+function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={styles.tabButton} onPress={onPress}>
+      <View style={[styles.tabDot, active && styles.tabDotActive]} />
+      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  centered: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#f5f5f5' },
-  container: { flexGrow: 1, padding: 24, paddingTop: 60, backgroundColor: '#f5f5f5' },
-  title: { fontSize: 24, fontWeight: '700', marginBottom: 8, color: '#1a1a1a' },
-  subtitle: { fontSize: 16, color: '#666', marginBottom: 20 },
-  label: { fontSize: 14, fontWeight: '600', marginTop: 16, marginBottom: 8, color: '#333' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg, backgroundColor: colors.cloud },
+  title: { fontFamily: fonts.display, fontSize: fontSizes.xxl, color: colors.indigo, marginBottom: spacing.sm },
   input: {
-    backgroundColor: '#fff',
+    width: '100%',
+    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-    fontSize: 16,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.base,
+    color: colors.charcoal,
   },
-  totalText: { fontSize: 18, fontWeight: '700', marginTop: 12, marginBottom: 20, color: '#2a7a2a' },
-  button: {
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
-    padding: 14,
+  loginButton: {
+    width: '100%',
+    backgroundColor: colors.indigo,
+    borderRadius: radii.pill,
+    padding: spacing.md,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  buttonDisabled: { backgroundColor: '#999' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  loginButtonText: { fontFamily: fonts.bodyBold, color: colors.white, fontSize: fontSizes.base },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+  },
+  tabButton: { flex: 1, alignItems: 'center' },
+  tabDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radii.pill,
+    backgroundColor: colors.line,
+    marginBottom: spacing.xs,
+  },
+  tabDotActive: { backgroundColor: colors.marigold },
+  tabLabel: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.sm, color: colors.charcoalMuted },
+  tabLabelActive: { color: colors.indigo },
 });
