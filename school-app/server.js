@@ -25,7 +25,8 @@ app.get('/api/health', async (req, res) => {
     await pool.query('SELECT 1');
     res.json({ status: 'ok', db: 'connected' });
   } catch (err) {
-    res.status(500).json({ status: 'error', db: 'disconnected' });
+    console.error('Health check DB error:', err.message);
+    res.status(500).json({ status: 'error', db: 'disconnected', detail: err.message });
   }
 });
 app.use('/api/auth', authRoutes);
