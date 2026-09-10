@@ -4,7 +4,7 @@ const pool = require('../config/db');
 
 async function login(req, res) {
   try {
-    const { email, password } = req.body;
+    const { email, password, classId } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
@@ -28,6 +28,21 @@ async function login(req, res) {
       return res.status(403).json({ error: 'This account has been blocked by the Director.' });
     }
 
+    let classInfo = null;
+    if (user.role === 'teacher') {
+      if (!classId) {
+        return res.status(400).json({ error: 'Please select your class before logging in.' });
+      }
+      const classResult = await pool.query(
+        'SELECT id, class_name FROM classes WHERE id = $1 AND teacher_id = $2',
+        [classId, user.id]
+      );
+      if (classResult.rows.length === 0) {
+        return res.status(403).json({ error: 'This account is not assigned to that class.' });
+      }
+      classInfo = classResult.rows[0];
+    }
+
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       process.env.JWT_SECRET,
@@ -42,6 +57,7 @@ async function login(req, res) {
         email: user.email,
         role: user.role,
       },
+      class: classInfo ? { id: classInfo.id, name: classInfo.class_name } : undefined,
     });
   } catch (err) {
     console.error('Login error:', err);

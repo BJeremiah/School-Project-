@@ -28,11 +28,9 @@ async function getTeacherClassId(userId) {
 // (sent by the frontend once a teacher has picked a class), falling back to
 // the old "class this account owns" lookup if none was provided.
 async function resolveClassId(req) {
-  const explicitClassId = req.query.classId || req.body.classId;
-  if (explicitClassId) {
-    const check = await pool.query('SELECT id FROM classes WHERE id = $1', [explicitClassId]);
-    return check.rows.length ? check.rows[0].id : null;
-  }
+  // Locked to the account's own assigned class -- a classId from the
+  // request is never trusted, since each class belongs to exactly one
+  // teacher account (enforced at login).
   return getTeacherClassId(req.user.userId);
 }
 
