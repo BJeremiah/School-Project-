@@ -37,7 +37,6 @@ import SubjectsScreen from './screens/teacher/SubjectsScreen';
 import ScoresScreen from './screens/teacher/ScoresScreen';
 import RecordsScreen from './screens/teacher/RecordsScreen';
 import ReportCardScreen from './screens/teacher/ReportCardScreen';
-import TeacherClassPickerScreen from './screens/teacher/TeacherClassPickerScreen';
 import ProfileScreen from './screens/shared/ProfileScreen';
 import ClassListScreen from './screens/secretary/ClassListScreen';
 import StudentListScreen from './screens/secretary/StudentListScreen';
@@ -56,12 +55,14 @@ import AccountantRecordsScreen from './screens/accountant/RecordsScreen';
 import OverviewScreen from './screens/director/OverviewScreen';
 import DirectorClassListScreen from './screens/director/DirectorClassListScreen';
 import DirectorClassDetailScreen from './screens/director/DirectorClassDetailScreen';
+import AssignTeachersScreen from './screens/director/AssignTeachersScreen';
 import DirectorSearchScreen from './screens/director/DirectorSearchScreen';
 import StudentMasterProfileScreen from './screens/director/StudentMasterProfileScreen';
 import DirectorNotificationsScreen from './screens/director/DirectorNotificationsScreen';
 import StaffAccountsScreen from './screens/director/StaffAccountsScreen';
 import DirectorRecordsScreen from './screens/director/DirectorRecordsScreen';
 import StatisticsScreen from './screens/director/StatisticsScreen';
+import SchoolSettingsScreen from './screens/director/SchoolSettingsScreen';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -93,10 +94,19 @@ type Subject = { id: string; name: string };
 const TEACHER_TABS: TeacherTab[] = ['attendance', 'assessment', 'records', 'profile'];
 
 
-function TeacherHome({ token, onLogout }: { token: string; onLogout: () => void }) {
+function TeacherHome({
+  token,
+  onLogout,
+  classId,
+  className,
+}: {
+  token: string;
+  onLogout: () => void;
+  classId: string;
+  className: string;
+}) {
   const insets = useSafeAreaInsets();
   const windowWidth = Dimensions.get('window').width;
-  const [selectedClass, setSelectedClass] = useState<{ id: string; name: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TeacherTab>('attendance');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [reportCardStudent, setReportCardStudent] = useState<{ id: string; name: string } | null>(null);
@@ -105,20 +115,11 @@ function TeacherHome({ token, onLogout }: { token: string; onLogout: () => void 
   const scrollX = React.useRef(new Animated.Value(0)).current;
   const [barWidth, setBarWidth] = useState(windowWidth);
 
-  if (!selectedClass) {
-
-    return (
-      <TeacherClassPickerScreen
-        token={token}
-        onSelectClass={(classId, className) => setSelectedClass({ id: classId, name: className })}
-      />
-    );
-  }
   if (reportCardStudent) {
     return (
       <ReportCardScreen
         token={token}
-        classId={selectedClass.id}
+        classId={classId}
         studentId={reportCardStudent.id}
         studentName={reportCardStudent.name}
         onBack={() => setReportCardStudent(null)}
@@ -158,15 +159,15 @@ function TeacherHome({ token, onLogout }: { token: string; onLogout: () => void 
         style={{ flex: 1 }}
       >
         <View style={{ width: windowWidth, flex: 1 }}>
-          <AttendanceScreen token={token} classId={selectedClass.id} />
+          <AttendanceScreen token={token} classId={classId} />
         </View>
         <View style={{ width: windowWidth, flex: 1 }}>
           {!selectedSubject ? (
-            <SubjectsScreen token={token} classId={selectedClass.id} onSelectSubject={setSelectedSubject} />
+            <SubjectsScreen token={token} classId={classId} onSelectSubject={setSelectedSubject} />
           ) : (
             <ScoresScreen
               token={token}
-              classId={selectedClass.id}
+              classId={classId}
               subjectId={selectedSubject.id}
               subjectName={selectedSubject.name}
               onBack={() => setSelectedSubject(null)}
@@ -176,7 +177,7 @@ function TeacherHome({ token, onLogout }: { token: string; onLogout: () => void 
         <View style={{ width: windowWidth, flex: 1 }}>
           <RecordsScreen
             token={token}
-            classId={selectedClass.id}
+            classId={classId}
             onOpenReportCard={(studentId, studentName) => setReportCardStudent({ id: studentId, name: studentName })}
           />
         </View>
@@ -423,6 +424,7 @@ export type DirectorStackParamList = {
   Overview: undefined;
   DirectorClassList: undefined;
   DirectorClassDetail: { classId: string; className: string };
+  AssignTeachers: undefined;
   DirectorSearch: undefined;
   StudentMasterProfile: { studentId: string };
   DirectorNotifications: undefined;
@@ -430,6 +432,7 @@ export type DirectorStackParamList = {
   DirectorRecords: undefined;
   Statistics: undefined;
   Profile: undefined;
+  SchoolSettings: undefined;
 };
 
 const DirectorStack = createNativeStackNavigator<DirectorStackParamList>();
@@ -448,13 +451,20 @@ function DirectorNavigator({ token, onLogout }: { token: string; onLogout: () =>
               onViewStaff={() => navigation.navigate('StaffAccounts')}
               onViewRecords={() => navigation.navigate('DirectorRecords')}
               onViewStatistics={() => navigation.navigate('Statistics')}
+              onAssignTeachers={() => navigation.navigate('AssignTeachers')}
               onViewProfile={() => navigation.navigate('Profile')}
+              onViewSchoolSettings={() => navigation.navigate('SchoolSettings')}
             />
           )}
         </DirectorStack.Screen>
         <DirectorStack.Screen name="Profile">
           {({ navigation }) => (
             <ProfileScreen token={token} onLogout={onLogout} onBack={() => navigation.goBack()} />
+          )}
+        </DirectorStack.Screen>
+        <DirectorStack.Screen name="SchoolSettings">
+          {({ navigation }) => (
+            <SchoolSettingsScreen token={token} onBack={() => navigation.goBack()} />
           )}
         </DirectorStack.Screen>
         <DirectorStack.Screen name="DirectorClassList">
@@ -466,6 +476,11 @@ function DirectorNavigator({ token, onLogout }: { token: string; onLogout: () =>
                 navigation.navigate('DirectorClassDetail', { classId, className })
               }
             />
+          )}
+        </DirectorStack.Screen>
+        <DirectorStack.Screen name="AssignTeachers">
+          {({ navigation }) => (
+            <AssignTeachersScreen token={token} onBack={() => navigation.goBack()} />
           )}
         </DirectorStack.Screen>
         <DirectorStack.Screen name="DirectorClassDetail">
@@ -531,6 +546,11 @@ function AppContent() {
   });
   const fontsLoaded = baloo2Loaded && nunitoSansLoaded;
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
+  const [classList, setClassList] = useState<{ id: string; class_name: string }[]>([]);
+  const [classesLoading, setClassesLoading] = useState(false);
+  const [loggedInClass, setLoggedInClass] = useState<{ id: string; name: string } | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('');
   const [userName, setUserName] = useState('');
@@ -538,6 +558,18 @@ function AppContent() {
   const [password, setPassword] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
   const [restoringSession, setRestoringSession] = useState(true);
+  const [schoolName, setSchoolName] = useState('School');
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/auth/school-name`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.school_name) setSchoolName(data.school_name);
+      })
+      .catch(() => {
+        // silent — keep the default fallback name if this fails
+      });
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -550,6 +582,11 @@ function AppContent() {
             setUserRole(parsed.role);
             setUserName(parsed.name || '');
             setSelectedRole(parsed.role as Role);
+            if (parsed.classId && parsed.className) {
+              setLoggedInClass({ id: parsed.classId, name: parsed.className });
+              setSelectedClassId(parsed.classId);
+              setSelectedClassName(parsed.className);
+            }
           }
         }
       } catch (e) {
@@ -559,6 +596,27 @@ function AppContent() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (selectedRole !== 'teacher' || token) return;
+
+    const loadTeacherClasses = async () => {
+      setClassesLoading(true);
+      try {
+        const res = await fetch(`${API_URL}/api/auth/classes`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load classes');
+        setClassList(data.classes || []);
+      } catch (err) {
+        Alert.alert('Could not load classes', 'Please check your connection and try again.');
+        setClassList([]);
+      } finally {
+        setClassesLoading(false);
+      }
+    };
+
+    loadTeacherClasses();
+  }, [selectedRole, token]);
 
   useEffect(() => {
     if (fontsLoaded && !restoringSession) {
@@ -571,12 +629,20 @@ function AppContent() {
       Alert.alert('Missing info', 'Please enter both email and password.');
       return;
     }
+    if (selectedRole === 'teacher' && !selectedClassId) {
+      Alert.alert('Missing info', 'Please select your class first.');
+      return;
+    }
     setLoggingIn(true);
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          classId: selectedRole === 'teacher' ? selectedClassId : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -593,10 +659,21 @@ function AppContent() {
       setToken(data.token);
       setUserRole(data.user.role);
       setUserName(data.user.name);
+      setLoggedInClass(data.class ? { id: data.class.id, name: data.class.name } : null);
+      if (data.class) {
+        setSelectedClassId(data.class.id);
+        setSelectedClassName(data.class.name);
+      }
       try {
         await AsyncStorage.setItem(
           'auth',
-          JSON.stringify({ token: data.token, role: data.user.role, name: data.user.name })
+          JSON.stringify({
+            token: data.token,
+            role: data.user.role,
+            name: data.user.name,
+            classId: data.class ? data.class.id : undefined,
+            className: data.class ? data.class.name : undefined,
+          })
         );
       } catch (e) {
         // non-fatal — session just won't persist this time
@@ -619,7 +696,7 @@ function AppContent() {
   if (!selectedRole) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.title}>KWAO Educational Complex</Text>
+        <Text style={styles.title}>{schoolName}</Text>
         <Text style={styles.subtitle}>Who are you signing in as?</Text>
         {(Object.keys(ROLE_LABELS) as Role[]).map((role) => (
           <Pressable key={role} style={styles.roleButton} onPress={() => setSelectedRole(role)}>
@@ -631,37 +708,83 @@ function AppContent() {
     );
   }
 
-  // --- LOGIN SCREEN (scoped to chosen role) ---
+  // --- LOGIN SCREEN (Teacher class picker happens before entering email/password) ---
   if (!token) {
+    const showTeacherClassPicker = selectedRole === 'teacher' && !selectedClassId;
+
     return (
       <View style={styles.centered}>
-        <Pressable onPress={() => setSelectedRole(null)} style={styles.backRow}>
+        <Pressable
+          onPress={() => {
+            if (selectedRole === 'teacher') {
+              setSelectedClassId(null);
+              setSelectedClassName(null);
+            } else {
+              setSelectedRole(null);
+            }
+          }}
+          style={styles.backRow}
+        >
           <Text style={styles.backArrow}>‹</Text>
-          <Text style={styles.backText}>Change role</Text>
+          <Text style={styles.backText}>{selectedRole === 'teacher' ? 'Change class' : 'Change role'}</Text>
         </Pressable>
-        <Text style={styles.title}>{ROLE_LABELS[selectedRole]} Login</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-        <Pressable style={styles.loginButton} onPress={handleLogin} disabled={loggingIn}>
-          {loggingIn ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.loginButtonText}>Log In</Text>
-          )}
-        </Pressable>
+
+        {showTeacherClassPicker ? (
+          <>
+            <Text style={styles.title}>Select Your Class</Text>
+            <Text style={styles.subtitle}>Which class are you teaching today?</Text>
+            {classesLoading ? (
+              <ActivityIndicator color={colors.indigo} />
+            ) : classList.length === 0 ? (
+              <Text style={styles.subtitle}>No classes are available yet.</Text>
+            ) : (
+              classList.map((c) => (
+                <Pressable
+                  key={c.id}
+                  style={[
+                    styles.roleButton,
+                    { backgroundColor: selectedClassId === c.id ? colors.indigoDark : colors.indigo },
+                  ]}
+                  onPress={() => {
+                    setSelectedClassId(c.id);
+                    setSelectedClassName(c.class_name);
+                  }}
+                >
+                  <Text style={styles.roleButtonText}>{c.class_name}</Text>
+                </Pressable>
+              ))
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={styles.title}>{ROLE_LABELS[selectedRole]} Login</Text>
+            {selectedRole === 'teacher' && selectedClassName ? (
+              <Text style={styles.subtitle}>Class: {selectedClassName}</Text>
+            ) : null}
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+            <Pressable style={styles.loginButton} onPress={handleLogin} disabled={loggingIn}>
+              {loggingIn ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.loginButtonText}>Log In</Text>
+              )}
+            </Pressable>
+          </>
+        )}
         <StatusBar style="auto" />
       </View>
     );
@@ -674,13 +797,23 @@ function AppContent() {
     setEmail('');
     setPassword('');
     setSelectedRole(null);
+    setSelectedClassId(null);
+    setSelectedClassName('');
+    setLoggedInClass(null);
     AsyncStorage.removeItem('auth').catch(() => {});
   };
   if (userRole === 'secretary') {
     return <SecretaryNavigator token={token} onLogout={handleLogout} />;
   }
   if (userRole === 'teacher') {
-    return <TeacherHome token={token} onLogout={handleLogout} />;
+    return (
+      <TeacherHome
+        token={token}
+        onLogout={handleLogout}
+        classId={loggedInClass?.id || selectedClassId || ''}
+        className={loggedInClass?.name || selectedClassName || 'Your Class'}
+      />
+    );
   }
   if (userRole === 'accountant') {
     return <AccountantNavigator token={token} onLogout={handleLogout} />;

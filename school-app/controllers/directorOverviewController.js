@@ -227,6 +227,89 @@ async function listClasses(req, res) {
   }
 }
 
+// GET /api/director/teacher-assignments — all classes and all teacher accounts, with current ownership
+async function listTeacherAssignments(req, res) {
+  try {
+    const [classesResult, teachersResult] = await Promise.all([
+      pool.query(
+        `SELECT c.id, c.class_name, c.teacher_id,
+                u.name AS teacher_name,
+                u.email AS teacher_email
+         FROM classes c
+         LEFT JOIN users u ON u.id = c.teacher_id
+         ORDER BY c.class_name`
+      ),
+      pool.query(
+        `SELECT id, name, email FROM users WHERE role = 'teacher' ORDER BY name`
+      )
+    ]);
+
+    res.json({
+      classes: classesResult.rows,
+      teachers: teachersResult.rows,
+    });
+  } catch (err) {
+    console.error('listTeacherAssignments error:', err);
+    res.status(500).json({ error: 'Failed to load teacher assignments.' });
+  }
+}
+
+// PUT /api/director/classes/:classId/teacher
+async function updateClassTeacher(req, res) {
+  const { classId } = req.params;
+  const { teacher_id } = req.body;
+
+  if (teacher_id !== null && teacher_id !== undefined && teacher_id !== '') {
+    const teacherResult = await pool.query(
+      'SELECT id, name FROM users WHERE id = $1 AND role = $2',
+      [teacher_id, 'teacher']
+    );
+    if (teacherResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Teacher account not found.' });
+    }
+
+    const existingClass = await pool.query(
+      'SELECT id FROM classes WHERE teacher_id = $1 AND id <> $2 LIMIT 1',
+      [teacher_id, classId]
+    );
+    if (existingClass.rows.length > 0) {
+      return res.status(409).json({ error: 'This teacher is already assigned to another class.' });
+    }
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE classes
+       SET teacher_id = $1
+       WHERE id = $2
+       RETURNING id, class_name, teacher_id`,
+      [teacher_id || null, classId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+
+    const updatedClass = result.rows[0];
+    const teacherName = updatedClass.teacher_id
+      ? (await pool.query('SELECT name FROM users WHERE id = $1', [updatedClass.teacher_id])).rows[0]?.name || null
+      : null;
+
+    res.json({
+      class: {
+        id: updatedClass.id,
+        class_name: updatedClass.class_name,
+        teacher_id: updatedClass.teacher_id,
+        teacher_name: teacherName,
+      },
+      message: updatedClass.teacher_id ? 'Teacher assigned.' : 'Teacher unassigned.',
+    });
+  } catch (err) {
+    console.error('updateClassTeacher error:', err);
+    res.status(500).json({ error: 'Failed to update teacher assignment.' });
+  }
+}
+
 // GET /api/director/classes/:classId — students with today's attendance + fee summary
 async function getClassDetail(req, res) {
   const { classId } = req.params;
@@ -745,6 +828,8 @@ async function getStatisticsTimeseries(req, res) {
 module.exports = {
   getOverview,
   listClasses,
+  listTeacherAssignments,
+  updateClassTeacher,
   getClassDetail,
   searchStudents,
   getStatisticsTimeseries,

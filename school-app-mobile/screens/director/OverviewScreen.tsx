@@ -33,7 +33,9 @@ export default function OverviewScreen({
   onViewStaff,
   onViewRecords,
   onViewStatistics,
+  onAssignTeachers,
   onViewProfile,
+  onViewSchoolSettings,
 }: {
   token: string;
   onViewClasses: () => void;
@@ -42,7 +44,9 @@ export default function OverviewScreen({
   onViewStaff: () => void;
   onViewRecords: () => void;
   onViewStatistics: () => void;
+  onAssignTeachers: () => void;
   onViewProfile: () => void;
+  onViewSchoolSettings: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
@@ -148,12 +152,14 @@ export default function OverviewScreen({
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
           <View style={styles.menuCard}>
             <MenuItem label="Classes" onPress={() => menuAction(onViewClasses)} />
+            <MenuItem label="Assign Teachers" onPress={() => menuAction(onAssignTeachers)} />
             <MenuItem label="Search Students" onPress={() => menuAction(onSearchStudents)} />
             <MenuItem label="Notifications" onPress={() => menuAction(onViewNotifications)} />
             <MenuItem label="Staff Accounts" onPress={() => menuAction(onViewStaff)} />
             <MenuItem label="Records" onPress={() => menuAction(onViewRecords)} />
             <MenuItem label="Statistics" onPress={() => menuAction(onViewStatistics)} />
-            <MenuItem label="Profile" onPress={() => menuAction(onViewProfile)} isLast />
+            <MenuItem label="Profile" onPress={() => menuAction(onViewProfile)} />
+            <MenuItem label="School Settings" onPress={() => menuAction(onViewSchoolSettings)} isLast />
           </View>
         </Pressable>
       </Modal>

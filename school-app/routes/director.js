@@ -8,6 +8,8 @@ const {
   getOverview,
   listClasses,
   getClassDetail,
+  listTeacherAssignments,
+  updateClassTeacher,
   searchStudents,
   getStudentMasterProfile,
   getRecords,
@@ -33,6 +35,8 @@ router.delete('/reports/:classId/today', ...directorOnly, resetTodayReport);
 router.get('/overview', ...directorOnly, getOverview);
 router.get('/all-classes', ...directorOnly, listClasses);
 router.get('/all-classes/:classId', ...directorOnly, getClassDetail);
+router.get('/teacher-assignments', ...directorOnly, listTeacherAssignments);
+router.put('/classes/:classId/teacher', ...directorOnly, updateClassTeacher);
 router.get('/all-students/search', ...directorOnly, searchStudents);
 router.get('/all-students/:id', ...directorOnly, getStudentMasterProfile);
 router.get('/all-records', ...directorOnly, getRecords);
