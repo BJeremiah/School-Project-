@@ -2,11 +2,12 @@
 // Every staff account (excluding directors) with role and block status. Block/unblock login access.
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { colors, fonts, fontSizes, radii, spacing, shadow } from '../../theme/theme';
 import { API_URL } from '../../config/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import PasswordInput from '../../components/PasswordInput';
 
 type StaffAccount = {
   id: string;
@@ -29,6 +30,11 @@ export default function StaffAccountsScreen({ token, onBack }: { token: string; 
   const [staff, setStaff] = useState<StaffAccount[]>([]);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<StaffAccount | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSubmitting, setResetSubmitting] = useState(false);
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -81,6 +87,54 @@ export default function StaffAccountsScreen({ token, onBack }: { token: string; 
     }
   };
 
+  const openResetModal = (account: StaffAccount) => {
+    setResetTarget(account);
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setResetError('');
+  };
+
+  const submitResetPassword = async () => {
+    if (!resetTarget) return;
+    if (!newPassword || !confirmNewPassword) {
+      setResetError('Please enter and confirm a new temporary password.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setResetError('Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setResetError('Passwords do not match.');
+      return;
+    }
+
+    setResetSubmitting(true);
+    setResetError('');
+    try {
+      const res = await fetch(`${API_URL}/api/director/staff/${resetTarget.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+
+      const targetName = resetTarget.name;
+      setResetTarget(null);
+      setNewPassword('');
+      setConfirmNewPassword('');
+      Alert.alert(
+        'Password Reset',
+        `${targetName}'s password has been reset. Share the new temporary password with them — they'll be asked to set their own at next login.`
+      );
+    } catch (e: any) {
+      setResetError(e.message || 'Could not reset password.');
+    } finally {
+      setResetSubmitting(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Pressable onPress={onBack} style={[styles.backRow, { paddingTop: insets.top + spacing.sm }]}>
@@ -120,23 +174,76 @@ export default function StaffAccountsScreen({ token, onBack }: { token: string; 
                   <Text style={styles.staffRole}>{ROLE_LABELS[item.role] || item.role}</Text>
                 </View>
 
-                {busyId === item.id ? (
-                  <ActivityIndicator color={colors.indigo} />
-                ) : (
-                  <Pressable
-                    style={[styles.toggleButton, item.is_blocked ? styles.unblockButton : styles.blockButton]}
-                    onPress={() => confirmToggleBlock(item)}
-                  >
-                    <Text style={[styles.toggleButtonText, item.is_blocked ? styles.unblockButtonText : styles.blockButtonText]}>
-                      {item.is_blocked ? 'Unblock' : 'Block'}
-                    </Text>
-                  </Pressable>
-                )}
+                <View style={styles.actionsCol}>
+                  {busyId === item.id ? (
+                    <ActivityIndicator color={colors.indigo} />
+                  ) : (
+                    <>
+                      <Pressable
+                        style={[styles.toggleButton, item.is_blocked ? styles.unblockButton : styles.blockButton]}
+                        onPress={() => confirmToggleBlock(item)}
+                      >
+                        <Text style={[styles.toggleButtonText, item.is_blocked ? styles.unblockButtonText : styles.blockButtonText]}>
+                          {item.is_blocked ? 'Unblock' : 'Block'}
+                        </Text>
+                      </Pressable>
+                      <Pressable style={styles.resetButton} onPress={() => openResetModal(item)}>
+                        <Text style={styles.resetButtonText}>Reset Password</Text>
+                      </Pressable>
+                    </>
+                  )}
+                </View>
               </View>
             </View>
           )}
         />
       )}
+
+      <Modal
+        visible={resetTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setResetTarget(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Reset Password</Text>
+            <Text style={styles.modalSubtitle}>
+              Set a new temporary password for {resetTarget?.name}. They'll be asked to set their own at next login.
+            </Text>
+
+            {resetError ? <Text style={styles.errorText}>{resetError}</Text> : null}
+
+            <PasswordInput
+              style={styles.modalInput}
+              placeholder="New temporary password"
+              placeholderTextColor={colors.charcoalMuted}
+              value={newPassword}
+              onChangeText={setNewPassword}
+            />
+            <PasswordInput
+              style={styles.modalInput}
+              placeholder="Confirm temporary password"
+              placeholderTextColor={colors.charcoalMuted}
+              value={confirmNewPassword}
+              onChangeText={setConfirmNewPassword}
+            />
+
+            <View style={styles.modalButtonRow}>
+              <Pressable style={styles.modalCancelButton} onPress={() => setResetTarget(null)} disabled={resetSubmitting}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={styles.modalSaveButton} onPress={submitResetPassword} disabled={resetSubmitting}>
+                {resetSubmitting ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.modalSaveText}>Reset</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -158,10 +265,50 @@ const styles = StyleSheet.create({
   staffName: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.base, color: colors.charcoal },
   staffDetail: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.charcoalMuted, marginTop: 2 },
   staffRole: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.xs, color: colors.indigo, marginTop: 2 },
+  actionsCol: { alignItems: 'flex-end', gap: spacing.xs },
   toggleButton: { borderRadius: radii.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   blockButton: { backgroundColor: colors.coral },
   blockButtonText: { color: colors.white },
   unblockButton: { borderWidth: 1, borderColor: colors.leaf },
   unblockButtonText: { color: colors.leaf },
   toggleButtonText: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.xs },
+  resetButton: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.indigo,
+  },
+  resetButtonText: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.xs, color: colors.indigo },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+  modalCard: { width: '100%', backgroundColor: colors.white, borderRadius: radii.lg, padding: spacing.lg },
+  modalTitle: { fontFamily: fonts.display, fontSize: fontSizes.xl, color: colors.indigo, marginBottom: spacing.xs },
+  modalSubtitle: { fontFamily: fonts.body, fontSize: fontSizes.sm, color: colors.charcoalMuted, marginBottom: spacing.md },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.base,
+    color: colors.charcoal,
+  },
+  modalButtonRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  modalCancelButton: {
+    flex: 1,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    backgroundColor: colors.cloud,
+  },
+  modalCancelText: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.base, color: colors.charcoalMuted },
+  modalSaveButton: {
+    flex: 1,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    backgroundColor: colors.indigo,
+  },
+  modalSaveText: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.base, color: colors.white },
 });

@@ -90,6 +90,7 @@ export default function SchoolSettingsScreen({ token, onBack }: { token: string;
           value={draft}
           onChangeText={setDraft}
           placeholder="School name"
+          placeholderTextColor={colors.charcoalMuted}
         />
         <Pressable style={styles.saveButton} onPress={save} disabled={saving}>
           {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.saveButtonText}>Save</Text>}

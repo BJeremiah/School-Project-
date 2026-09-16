@@ -11,7 +11,7 @@ async function login(req, res) {
     }
 
     const result = await pool.query(
-      'SELECT id, name, email, password_hash, role, is_blocked FROM users WHERE email = $1',
+      'SELECT id, name, email, password_hash, role, is_blocked, must_change_password FROM users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
     if (result.rows.length === 0) {
@@ -57,6 +57,7 @@ async function login(req, res) {
         email: user.email,
         role: user.role,
       },
+      must_change_password: Boolean(user.must_change_password),
       class: classInfo ? { id: classInfo.id, name: classInfo.class_name } : undefined,
     });
   } catch (err) {

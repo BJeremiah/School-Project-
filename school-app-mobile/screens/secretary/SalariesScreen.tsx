@@ -295,18 +295,21 @@ export default function SalariesScreen({
             <TextInput
               style={styles.modalInput}
               placeholder="Name"
+              placeholderTextColor={colors.charcoalMuted}
               value={newName}
               onChangeText={setNewName}
             />
             <TextInput
               style={styles.modalInput}
               placeholder="Position (optional)"
+              placeholderTextColor={colors.charcoalMuted}
               value={newPosition}
               onChangeText={setNewPosition}
             />
             <TextInput
               style={styles.modalInput}
               placeholder="Account Number (optional)"
+              placeholderTextColor={colors.charcoalMuted}
               value={newAccountNumber}
               onChangeText={setNewAccountNumber}
             />
@@ -333,18 +336,21 @@ export default function SalariesScreen({
             <TextInput
               style={styles.modalInput}
               placeholder="Name"
+              placeholderTextColor={colors.charcoalMuted}
               value={editName}
               onChangeText={setEditName}
             />
             <TextInput
               style={styles.modalInput}
               placeholder="Position (optional)"
+              placeholderTextColor={colors.charcoalMuted}
               value={editPosition}
               onChangeText={setEditPosition}
             />
             <TextInput
               style={styles.modalInput}
               placeholder="Account Number (optional)"
+              placeholderTextColor={colors.charcoalMuted}
               value={editAccountNumber}
               onChangeText={setEditAccountNumber}
             />
@@ -407,6 +413,7 @@ function StaffCard({
             onChangeText={onChangeDraft}
             keyboardType="decimal-pad"
             placeholder="0.00"
+            placeholderTextColor={colors.charcoalMuted}
           />
 
           {saving ? (

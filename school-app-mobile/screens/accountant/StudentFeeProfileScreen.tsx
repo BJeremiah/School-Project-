@@ -251,6 +251,7 @@ export default function StudentFeeProfileScreen({
             <TextInput
               style={styles.modalInput}
               placeholder="Amount"
+              placeholderTextColor={colors.charcoalMuted}
               value={payAmount}
               onChangeText={setPayAmount}
               keyboardType="decimal-pad"

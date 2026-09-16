@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 
 function todayStr() {
@@ -614,6 +615,39 @@ async function unblockStaff(req, res) {
   }
 }
 
+// POST /api/director/staff/:id/reset-password — director sets a new temporary password for a
+// staff member (e.g. one who forgot theirs). Passwords are hashed and never readable, so this
+// is the recovery path instead of the director being able to "see" a password.
+async function resetStaffPassword(req, res) {
+  const { id } = req.params;
+  const { password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ error: 'A new temporary password is required.' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Temporary password must be at least 6 characters.' });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      `UPDATE users
+       SET password_hash = $1, must_change_password = true
+       WHERE id = $2 AND role != 'director'
+       RETURNING id, name, role`,
+      [passwordHash, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Staff account not found.' });
+    }
+    res.json({ message: 'Password reset. They will be asked to set a new one at next login.', user: result.rows[0] });
+  } catch (err) {
+    console.error('resetStaffPassword error:', err);
+    res.status(500).json({ error: 'Failed to reset password.' });
+  }
+}
+
 // GET /api/director/statistics — this period vs last period, for revenue, admissions, and attendance
 async function getStatistics(req, res) {
   try {
@@ -825,11 +859,75 @@ async function getStatisticsTimeseries(req, res) {
   }
 }
 
+async function createTeacherAccount(req, res) {
+  const { name, email, password, classId } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Teacher name is required.' });
+  }
+  if (!email || !email.trim()) {
+    return res.status(400).json({ error: 'Teacher email is required.' });
+  }
+  if (!password) {
+    return res.status(400).json({ error: 'Temporary password is required.' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Temporary password must be at least 6 characters.' });
+  }
+  if (!classId) {
+    return res.status(400).json({ error: 'A class must be selected for the new teacher.' });
+  }
+
+  const normalizedName = name.trim();
+  const normalizedEmail = email.toLowerCase().trim();
+
+  try {
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'An account with that email already exists.' });
+    }
+
+    const classCheck = await pool.query('SELECT id, class_name, teacher_id FROM classes WHERE id = $1', [classId]);
+    if (classCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+    if (classCheck.rows[0].teacher_id) {
+      return res.status(409).json({ error: 'This class already has a teacher assigned. Unassign them first.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const newUserResult = await pool.query(
+      `INSERT INTO users (name, email, password_hash, role, must_change_password)
+       VALUES ($1, $2, $3, 'teacher', true)
+       RETURNING id, name, email, role, must_change_password`,
+      [normalizedName, normalizedEmail, passwordHash]
+    );
+
+    const assignedClassResult = await pool.query(
+      `UPDATE classes
+       SET teacher_id = $1
+       WHERE id = $2
+       RETURNING id, class_name, teacher_id`,
+      [newUserResult.rows[0].id, classId]
+    );
+
+    return res.status(201).json({
+      message: 'Teacher account created and assigned to class.',
+      teacher: newUserResult.rows[0],
+      class: assignedClassResult.rows[0],
+    });
+  } catch (err) {
+    console.error('createTeacherAccount error:', err);
+    return res.status(500).json({ error: 'Failed to create teacher account.' });
+  }
+}
+
 module.exports = {
   getOverview,
   listClasses,
   listTeacherAssignments,
   updateClassTeacher,
+  createTeacherAccount,
   getClassDetail,
   searchStudents,
   getStatisticsTimeseries,
@@ -839,6 +937,7 @@ module.exports = {
   getAdmissionNotifications,
   listStaffAccounts,
   blockStaff,
+  resetStaffPassword,
   unblockStaff,
   getStatistics,
 };

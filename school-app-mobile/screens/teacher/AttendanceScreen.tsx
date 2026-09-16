@@ -313,28 +313,6 @@ export default function AttendanceScreen({ token, classId }: { token: string; cl
             <Text style={styles.headerSubtitle}>
               {presentCount} / {students.length} present
             </Text>
-
-            <View style={styles.statsRow}>
-              <View style={[styles.statCard, { backgroundColor: colors.leafLight }]}>
-                <Text style={[styles.statValue, { color: colors.leaf }]}>{presentCount}</Text>
-                <Text style={styles.statLabel}>Present</Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: colors.coralLight }]}>
-                <Text style={[styles.statValue, { color: colors.coral }]}>{absentCount}</Text>
-                <Text style={styles.statLabel}>Absent</Text>
-              </View>
-            </View>
-
-            <View style={styles.statsRow}>
-              <View style={styles.statCardSmall}>
-                <Text style={styles.statValueSmall}>{genderStats.malePresent}/{genderStats.malePresent + genderStats.maleAbsent}</Text>
-                <Text style={styles.statLabel}>Boys present</Text>
-              </View>
-              <View style={styles.statCardSmall}>
-                <Text style={styles.statValueSmall}>{genderStats.femalePresent}/{genderStats.femalePresent + genderStats.femaleAbsent}</Text>
-                <Text style={styles.statLabel}>Girls present</Text>
-              </View>
-            </View>
           </>
         )}
 
@@ -370,10 +348,6 @@ export default function AttendanceScreen({ token, classId }: { token: string; cl
             </Text>
           </Pressable>
         </View>
-
-        {!isHoliday && students.length > 0 && (
-          <Text style={styles.hintText}>Long-press a student to remove them</Text>
-        )}
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -396,6 +370,35 @@ export default function AttendanceScreen({ token, classId }: { token: string; cl
             data={students}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
+            ListHeaderComponent={
+              <View style={styles.scrollingStats}>
+                <View style={styles.statsRow}>
+                  <View style={[styles.statCard, { backgroundColor: colors.leafLight }]}>
+                    <Text style={[styles.statValue, { color: colors.leaf }]}>{presentCount}</Text>
+                    <Text style={styles.statLabel}>Present</Text>
+                  </View>
+                  <View style={[styles.statCard, { backgroundColor: colors.coralLight }]}>
+                    <Text style={[styles.statValue, { color: colors.coral }]}>{absentCount}</Text>
+                    <Text style={styles.statLabel}>Absent</Text>
+                  </View>
+                </View>
+
+                <View style={styles.statsRow}>
+                  <View style={styles.statCardSmall}>
+                    <Text style={styles.statValueSmall}>{genderStats.malePresent}/{genderStats.malePresent + genderStats.maleAbsent}</Text>
+                    <Text style={styles.statLabel}>Boys present</Text>
+                  </View>
+                  <View style={styles.statCardSmall}>
+                    <Text style={styles.statValueSmall}>{genderStats.femalePresent}/{genderStats.femalePresent + genderStats.femaleAbsent}</Text>
+                    <Text style={styles.statLabel}>Girls present</Text>
+                  </View>
+                </View>
+
+                {students.length > 0 && (
+                  <Text style={styles.hintText}>Long-press a student to remove them</Text>
+                )}
+              </View>
+            }
             renderItem={({ item }) => (
               <StudentCard
                 student={item}
@@ -426,12 +429,14 @@ export default function AttendanceScreen({ token, classId }: { token: string; cl
             <TextInput
               style={styles.modalInput}
               placeholder="First Name"
+              placeholderTextColor={colors.charcoalMuted}
               value={newFirstName}
               onChangeText={setNewFirstName}
             />
             <TextInput
               style={styles.modalInput}
               placeholder="Last Name"
+              placeholderTextColor={colors.charcoalMuted}
               value={newLastName}
               onChangeText={setNewLastName}
             />
@@ -454,6 +459,7 @@ export default function AttendanceScreen({ token, classId }: { token: string; cl
             <TextInput
               style={styles.modalInput}
               placeholder="Admission Number (optional)"
+              placeholderTextColor={colors.charcoalMuted}
               value={newAdmissionNumber}
               onChangeText={setNewAdmissionNumber}
             />
@@ -625,6 +631,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
+  scrollingStats: { marginTop: spacing.sm, marginBottom: spacing.md },
   cardWrap: { marginBottom: spacing.sm, borderRadius: radii.lg },
   card: {
     flexDirection: 'row',

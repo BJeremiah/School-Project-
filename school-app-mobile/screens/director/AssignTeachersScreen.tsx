@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert, ScrollView, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts, fontSizes, radii, spacing, shadow } from '../../theme/theme';
 import { API_URL } from '../../config/api';
+import PasswordInput from '../../components/PasswordInput';
 
 type TeacherOption = {
   id: string;
@@ -31,6 +32,13 @@ export default function AssignTeachersScreen({
   const [classes, setClasses] = useState<ClassAssignment[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [error, setError] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [selectedNewClassId, setSelectedNewClassId] = useState<string | null>(null);
+  const [creatingTeacher, setCreatingTeacher] = useState(false);
+  const unassignedClasses = classes.filter((cls) => !cls.teacher_id);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -88,6 +96,63 @@ export default function AssignTeachersScreen({
     }
   };
 
+  const createTeacher = async () => {
+    if (!newName.trim() || !newEmail.trim() || !newPassword || !selectedNewClassId) {
+      Alert.alert('Missing info', 'Please fill in name, email, temporary password, and class.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      Alert.alert('Password too short', 'The temporary password must be at least 6 characters.');
+      return;
+    }
+
+    setCreatingTeacher(true);
+    try {
+      const res = await fetch(`${API_URL}/api/director/teacher-accounts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+          email: newEmail.trim(),
+          password: newPassword,
+          classId: selectedNewClassId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create teacher account');
+
+      setTeachers((prev) => [
+        ...prev,
+        { id: data.teacher.id, name: data.teacher.name, email: data.teacher.email },
+      ]);
+      setClasses((prev) =>
+        prev.map((cls) =>
+          cls.id === selectedNewClassId
+            ? {
+                ...cls,
+                teacher_id: data.teacher.id,
+                teacher_name: data.teacher.name,
+                teacher_email: data.teacher.email,
+              }
+            : cls
+        )
+      );
+      setNewName('');
+      setNewEmail('');
+      setNewPassword('');
+      setSelectedNewClassId(null);
+      setShowCreateForm(false);
+      Alert.alert('Teacher created', `${data.teacher.name} has been created and assigned to the selected class.`);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Could not create teacher account.');
+    } finally {
+      setCreatingTeacher(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -110,6 +175,71 @@ export default function AssignTeachersScreen({
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       <ScrollView contentContainerStyle={styles.list}>
+        <View style={[styles.card, shadow.card]}>
+          <Pressable style={styles.addTeacherButton} onPress={() => setShowCreateForm((prev) => !prev)}>
+            <Text style={styles.addTeacherButtonText}>{showCreateForm ? 'Hide Form' : '+ Add Teacher'}</Text>
+          </Pressable>
+
+          {showCreateForm ? (
+            <View style={styles.formWrap}>
+              <TextInput
+                style={styles.input}
+                placeholder="Teacher name"
+                placeholderTextColor={colors.charcoalMuted}
+                value={newName}
+                onChangeText={setNewName}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Teacher email"
+                placeholderTextColor={colors.charcoalMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={newEmail}
+                onChangeText={setNewEmail}
+              />
+              <PasswordInput
+                style={styles.input}
+                placeholder="Temporary password"
+                placeholderTextColor={colors.charcoalMuted}
+                value={newPassword}
+                onChangeText={setNewPassword}
+              />
+
+              <Text style={styles.label}>Assign to class</Text>
+              {unassignedClasses.length === 0 ? (
+                <Text style={styles.classMeta}>Every class already has a teacher assigned.</Text>
+              ) : (
+                <View style={styles.classList}>
+                  {unassignedClasses.map((cls) => (
+                    <Pressable
+                      key={cls.id}
+                      onPress={() => setSelectedNewClassId(cls.id)}
+                      style={[
+                        styles.classPill,
+                        selectedNewClassId === cls.id && styles.classPillSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.classPillText,
+                          selectedNewClassId === cls.id && styles.classPillTextSelected,
+                        ]}
+                      >
+                        {cls.class_name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              <Pressable style={styles.primaryButton} onPress={createTeacher} disabled={creatingTeacher}>
+                {creatingTeacher ? <ActivityIndicator color={colors.white} /> : <Text style={styles.primaryButtonText}>Create Teacher</Text>}
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+
         {classes.map((cls) => (
           <View key={cls.id} style={[styles.card, shadow.card]}>
             <View style={styles.classHeader}>
@@ -219,4 +349,49 @@ const styles = StyleSheet.create({
   optionText: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.sm, color: colors.charcoal },
   optionTextSelected: { color: colors.white },
   saving: { marginTop: spacing.sm },
+  addTeacherButton: {
+    backgroundColor: colors.indigo,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  addTeacherButtonText: { fontFamily: fonts.bodyBold, fontSize: fontSizes.base, color: colors.white },
+  formWrap: { marginTop: spacing.sm },
+  input: {
+    backgroundColor: colors.cloud,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    fontFamily: fonts.body,
+    fontSize: fontSizes.base,
+    color: colors.charcoal,
+  },
+  classList: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.sm },
+  classPill: {
+    backgroundColor: colors.cloud,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    marginRight: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  classPillSelected: {
+    backgroundColor: colors.indigo,
+    borderColor: colors.indigo,
+  },
+  classPillText: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.sm, color: colors.charcoal },
+  classPillTextSelected: { color: colors.white },
+  primaryButton: {
+    backgroundColor: colors.indigo,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  primaryButtonText: { fontFamily: fonts.bodyBold, color: colors.white, fontSize: fontSizes.base },
 });

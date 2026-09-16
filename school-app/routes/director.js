@@ -10,6 +10,7 @@ const {
   getClassDetail,
   listTeacherAssignments,
   updateClassTeacher,
+  createTeacherAccount,
   searchStudents,
   getStudentMasterProfile,
   getRecords,
@@ -18,6 +19,7 @@ const {
   listStaffAccounts,
   blockStaff,
   unblockStaff,
+  resetStaffPassword,
   getStatistics,
   getStatisticsTimeseries,
 } = require('../controllers/directorOverviewController');
@@ -36,6 +38,7 @@ router.get('/overview', ...directorOnly, getOverview);
 router.get('/all-classes', ...directorOnly, listClasses);
 router.get('/all-classes/:classId', ...directorOnly, getClassDetail);
 router.get('/teacher-assignments', ...directorOnly, listTeacherAssignments);
+router.post('/teacher-accounts', ...directorOnly, createTeacherAccount);
 router.put('/classes/:classId/teacher', ...directorOnly, updateClassTeacher);
 router.get('/all-students/search', ...directorOnly, searchStudents);
 router.get('/all-students/:id', ...directorOnly, getStudentMasterProfile);
@@ -45,6 +48,7 @@ router.get('/notifications/admissions', ...directorOnly, getAdmissionNotificatio
 router.get('/staff', ...directorOnly, listStaffAccounts);
 router.post('/staff/:id/block', ...directorOnly, blockStaff);
 router.post('/staff/:id/unblock', ...directorOnly, unblockStaff);
+router.post('/staff/:id/reset-password', ...directorOnly, resetStaffPassword);
 router.get('/statistics', ...directorOnly, getStatistics);
 router.get('/statistics/timeseries', ...directorOnly, getStatisticsTimeseries);
 router.put('/settings/school-name', ...directorOnly, updateSchoolName);

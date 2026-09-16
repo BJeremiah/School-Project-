@@ -44,25 +44,40 @@ async function updateName(req, res) {
 async function updatePassword(req, res) {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current and new password are required.' });
+    if (!newPassword) {
+      return res.status(400).json({ error: 'A new password is required.' });
     }
     if (newPassword.length < 6) {
       return res.status(400).json({ error: 'New password must be at least 6 characters.' });
     }
 
-    const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
+    const result = await pool.query(
+      'SELECT password_hash, must_change_password FROM users WHERE id = $1',
+      [req.user.userId]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    const matches = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
-    if (!matches) {
-      return res.status(401).json({ error: 'Current password is incorrect.' });
+    const user = result.rows[0];
+    const requiresCurrentPassword = !(user.must_change_password === true);
+
+    if (requiresCurrentPassword && !currentPassword) {
+      return res.status(400).json({ error: 'Current password is required.' });
+    }
+
+    if (requiresCurrentPassword) {
+      const matches = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!matches) {
+        return res.status(401).json({ error: 'Current password is incorrect.' });
+      }
     }
 
     const newHash = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.user.userId]);
+    await pool.query(
+      'UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2',
+      [newHash, req.user.userId]
+    );
 
     return res.status(200).json({ message: 'Password updated successfully.' });
   } catch (err) {

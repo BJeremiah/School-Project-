@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
@@ -63,8 +64,37 @@ import StaffAccountsScreen from './screens/director/StaffAccountsScreen';
 import DirectorRecordsScreen from './screens/director/DirectorRecordsScreen';
 import StatisticsScreen from './screens/director/StatisticsScreen';
 import SchoolSettingsScreen from './screens/director/SchoolSettingsScreen';
+import PasswordInput from './components/PasswordInput';
 
 SplashScreen.preventAutoHideAsync();
+
+// Global 401 handling: any authenticated request that comes back Unauthorized
+// (expired/invalid token, or the account no longer exists) triggers an automatic
+// logout back to the login screen, instead of leaving the user stuck on a broken
+// screen. Patched once here so every screen's plain `fetch(...)` calls are covered
+// without having to thread a special fetch helper through the whole app.
+const originalFetch = globalThis.fetch.bind(globalThis);
+let unauthorizedHandler: (() => void) | null = null;
+let hasShownExpiryAlert = false;
+
+function requestHasAuthHeader(headers: HeadersInit | undefined): boolean {
+  if (!headers) return false;
+  if (headers instanceof Headers) return headers.has('Authorization');
+  if (Array.isArray(headers)) return headers.some(([key]) => key.toLowerCase() === 'authorization');
+  return Object.keys(headers).some((key) => key.toLowerCase() === 'authorization');
+}
+
+globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const response = await originalFetch(input, init);
+  if (response.status === 401 && requestHasAuthHeader(init?.headers) && unauthorizedHandler) {
+    if (!hasShownExpiryAlert) {
+      hasShownExpiryAlert = true;
+      Alert.alert('Session Expired', 'Please log in again.');
+    }
+    unauthorizedHandler();
+  }
+  return response;
+}) as typeof fetch;
 
 type Role = 'teacher' | 'secretary' | 'accountant' | 'director';
 
@@ -197,21 +227,29 @@ function TeacherHome({
             ]}
           />
           <TeacherTabButton
+            icon="people-outline"
+            activeIcon="people"
             label="Attendance"
             active={activeTab === 'attendance'}
             onPress={() => goToTab('attendance')}
           />
           <TeacherTabButton
+            icon="bar-chart-outline"
+            activeIcon="bar-chart"
             label="Assessment"
             active={activeTab === 'assessment'}
             onPress={() => goToTab('assessment')}
           />
           <TeacherTabButton
+            icon="time-outline"
+            activeIcon="time"
             label="Records"
             active={activeTab === 'records'}
             onPress={() => goToTab('records')}
           />
           <TeacherTabButton
+            icon="person-circle-outline"
+            activeIcon="person-circle"
             label="Profile"
             active={activeTab === 'profile'}
             onPress={() => goToTab('profile')}
@@ -221,10 +259,26 @@ function TeacherHome({
     </View>
   );
 }
-function TeacherTabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function TeacherTabButton({
+  icon,
+  activeIcon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  activeIcon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
   return (
-    <Pressable style={teacherStyles.tabButton} onPress={onPress}>
-      <Text style={[teacherStyles.tabLabel, active && teacherStyles.tabLabelActive]}>{label}</Text>
+    <Pressable style={teacherStyles.tabButton} onPress={onPress} accessibilityLabel={label}>
+      <Ionicons
+        name={active ? activeIcon : icon}
+        size={24}
+        color={active ? colors.white : colors.charcoalMuted}
+      />
     </Pressable>
   );
 }
@@ -253,8 +307,6 @@ const teacherStyles = StyleSheet.create({
     backgroundColor: colors.indigo,
   },
   tabButton: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, zIndex: 1 },
-  tabLabel: { fontFamily: fonts.bodySemiBold, fontSize: fontSizes.sm, color: colors.charcoalMuted },
-  tabLabelActive: { color: colors.white },
 });
 function SecretaryNavigator({ token, onLogout }: { token: string; onLogout: () => void }) {
   return (
@@ -559,6 +611,12 @@ function AppContent() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [restoringSession, setRestoringSession] = useState(true);
   const [schoolName, setSchoolName] = useState('School');
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [showTeacherClassPicker, setShowTeacherClassPicker] = useState(false);
+  const [classError, setClassError] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [confirmResetPassword, setConfirmResetPassword] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   useEffect(() => {
     fetch(`${API_URL}/api/auth/school-name`)
@@ -582,6 +640,7 @@ function AppContent() {
             setUserRole(parsed.role);
             setUserName(parsed.name || '');
             setSelectedRole(parsed.role as Role);
+            setMustChangePassword(Boolean(parsed.mustChangePassword));
             if (parsed.classId && parsed.className) {
               setLoggedInClass({ id: parsed.classId, name: parsed.className });
               setSelectedClassId(parsed.classId);
@@ -597,26 +656,26 @@ function AppContent() {
     })();
   }, []);
 
+  const loadTeacherClasses = useCallback(async () => {
+    setClassesLoading(true);
+    setClassError('');
+    try {
+      const res = await fetch(`${API_URL}/api/auth/classes`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load classes');
+      setClassList(data.classes || []);
+    } catch (err) {
+      setClassList([]);
+      setClassError('Could not load classes.');
+    } finally {
+      setClassesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedRole !== 'teacher' || token) return;
-
-    const loadTeacherClasses = async () => {
-      setClassesLoading(true);
-      try {
-        const res = await fetch(`${API_URL}/api/auth/classes`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load classes');
-        setClassList(data.classes || []);
-      } catch (err) {
-        Alert.alert('Could not load classes', 'Please check your connection and try again.');
-        setClassList([]);
-      } finally {
-        setClassesLoading(false);
-      }
-    };
-
     loadTeacherClasses();
-  }, [selectedRole, token]);
+  }, [selectedRole, token, loadTeacherClasses]);
 
   useEffect(() => {
     if (fontsLoaded && !restoringSession) {
@@ -659,6 +718,7 @@ function AppContent() {
       setToken(data.token);
       setUserRole(data.user.role);
       setUserName(data.user.name);
+      setMustChangePassword(Boolean(data.must_change_password));
       setLoggedInClass(data.class ? { id: data.class.id, name: data.class.name } : null);
       if (data.class) {
         setSelectedClassId(data.class.id);
@@ -673,6 +733,7 @@ function AppContent() {
             name: data.user.name,
             classId: data.class ? data.class.id : undefined,
             className: data.class ? data.class.name : undefined,
+            mustChangePassword: Boolean(data.must_change_password),
           })
         );
       } catch (e) {
@@ -688,8 +749,111 @@ function AppContent() {
     }
   }
 
+  async function handleForcedPasswordChange() {
+    if (!resetPassword || !confirmResetPassword) {
+      Alert.alert('Missing info', 'Please enter and confirm a new password.');
+      return;
+    }
+    if (resetPassword.length < 6) {
+      Alert.alert('Password too short', 'New password must be at least 6 characters.');
+      return;
+    }
+    if (resetPassword !== confirmResetPassword) {
+      Alert.alert('Password mismatch', 'The new password and confirm password do not match.');
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      const res = await fetch(`${API_URL}/api/profile/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ newPassword: resetPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+
+      setMustChangePassword(false);
+      setResetPassword('');
+      setConfirmResetPassword('');
+      try {
+        const saved = await AsyncStorage.getItem('auth');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          await AsyncStorage.setItem(
+            'auth',
+            JSON.stringify({
+              ...parsed,
+              mustChangePassword: false,
+            })
+          );
+        }
+      } catch (e) {
+        // non-fatal
+      }
+    } catch (err: any) {
+      Alert.alert('Could not save password', err.message || 'Please try again.');
+    } finally {
+      setResettingPassword(false);
+    }
+  }
+
+  const performLogout = useCallback(() => {
+    setToken(null);
+    setUserRole('');
+    setUserName('');
+    setEmail('');
+    setPassword('');
+    setSelectedRole(null);
+    setSelectedClassId(null);
+    setSelectedClassName('');
+    setLoggedInClass(null);
+    setMustChangePassword(false);
+    setShowTeacherClassPicker(false);
+    setResetPassword('');
+    setConfirmResetPassword('');
+    AsyncStorage.removeItem('auth').catch(() => {});
+    hasShownExpiryAlert = false;
+  }, []);
+
+  useEffect(() => {
+    unauthorizedHandler = performLogout;
+    return () => {
+      if (unauthorizedHandler === performLogout) unauthorizedHandler = null;
+    };
+  }, [performLogout]);
+
   if (!fontsLoaded || restoringSession) {
     return <View style={{ flex: 1, backgroundColor: colors.cloud }} />;
+  }
+
+  if (mustChangePassword && token) {
+    return (
+      <View style={[styles.centered, { justifyContent: 'center' }]}>
+        <Text style={styles.title}>Set a New Password</Text>
+        <Text style={styles.subtitle}>This account requires a password change before continuing.</Text>
+
+        <PasswordInput
+          style={styles.input}
+          placeholder="New Password"
+          placeholderTextColor={colors.charcoalMuted}
+          value={resetPassword}
+          onChangeText={setResetPassword}
+        />
+        <PasswordInput
+          style={styles.input}
+          placeholder="Confirm New Password"
+          placeholderTextColor={colors.charcoalMuted}
+          value={confirmResetPassword}
+          onChangeText={setConfirmResetPassword}
+        />
+
+        <Pressable style={styles.loginButton} onPress={handleForcedPasswordChange} disabled={resettingPassword}>
+          {resettingPassword ? <ActivityIndicator color={colors.white} /> : <Text style={styles.loginButtonText}>Continue</Text>}
+        </Pressable>
+        <StatusBar style="auto" />
+      </View>
+    );
   }
 
   // --- ROLE PICKER ---
@@ -708,100 +872,110 @@ function AppContent() {
     );
   }
 
-  // --- LOGIN SCREEN (Teacher class picker happens before entering email/password) ---
+  // --- LOGIN SCREEN ---
   if (!token) {
-    const showTeacherClassPicker = selectedRole === 'teacher' && !selectedClassId;
-
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { justifyContent: 'flex-start', alignItems: 'stretch' }]}> 
         <Pressable
           onPress={() => {
-            if (selectedRole === 'teacher') {
-              setSelectedClassId(null);
-              setSelectedClassName(null);
-            } else {
-              setSelectedRole(null);
-            }
+            setSelectedRole(null);
+            setSelectedClassId(null);
+            setSelectedClassName(null);
+            setShowTeacherClassPicker(false);
+            setClassError('');
           }}
           style={styles.backRow}
         >
           <Text style={styles.backArrow}>‹</Text>
-          <Text style={styles.backText}>{selectedRole === 'teacher' ? 'Change class' : 'Change role'}</Text>
+          <Text style={styles.backText}>Change role</Text>
         </Pressable>
 
-        {showTeacherClassPicker ? (
+        <Text style={styles.title}>{ROLE_LABELS[selectedRole]} Login</Text>
+
+        {selectedRole === 'teacher' ? (
           <>
-            <Text style={styles.title}>Select Your Class</Text>
-            <Text style={styles.subtitle}>Which class are you teaching today?</Text>
-            {classesLoading ? (
-              <ActivityIndicator color={colors.indigo} />
-            ) : classList.length === 0 ? (
-              <Text style={styles.subtitle}>No classes are available yet.</Text>
-            ) : (
-              classList.map((c) => (
-                <Pressable
-                  key={c.id}
-                  style={[
-                    styles.roleButton,
-                    { backgroundColor: selectedClassId === c.id ? colors.indigoDark : colors.indigo },
-                  ]}
-                  onPress={() => {
-                    setSelectedClassId(c.id);
-                    setSelectedClassName(c.class_name);
-                  }}
-                >
-                  <Text style={styles.roleButtonText}>{c.class_name}</Text>
-                </Pressable>
-              ))
-            )}
-          </>
-        ) : (
-          <>
-            <Text style={styles.title}>{ROLE_LABELS[selectedRole]} Login</Text>
-            {selectedRole === 'teacher' && selectedClassName ? (
-              <Text style={styles.subtitle}>Class: {selectedClassName}</Text>
-            ) : null}
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-            <Pressable style={styles.loginButton} onPress={handleLogin} disabled={loggingIn}>
-              {loggingIn ? (
-                <ActivityIndicator color={colors.white} />
-              ) : (
-                <Text style={styles.loginButtonText}>Log In</Text>
-              )}
+            <Pressable
+              style={styles.inputBox}
+              onPress={() => {
+                if (classError) {
+                  loadTeacherClasses();
+                  return;
+                }
+                setShowTeacherClassPicker((prev) => !prev);
+              }}
+            >
+              <Text style={[styles.inputLabel, !selectedClassName && styles.inputPlaceholder]}>
+                {selectedClassName || 'Class'}
+              </Text>
             </Pressable>
+
+            {classError ? (
+              <View style={styles.inlineErrorWrap}>
+                <Text style={styles.inlineErrorText}>{classError}</Text>
+                <Pressable onPress={loadTeacherClasses}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {showTeacherClassPicker ? (
+              <View style={styles.pickerBox}>
+                {classesLoading ? (
+                  <ActivityIndicator color={colors.indigo} />
+                ) : classList.length === 0 ? (
+                  <Text style={styles.subtitle}>No classes are available yet.</Text>
+                ) : (
+                  <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
+                    {classList.map((c) => (
+                      <Pressable
+                        key={c.id}
+                        style={[
+                          styles.optionButton,
+                          selectedClassId === c.id && styles.optionButtonSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedClassId(c.id);
+                          setSelectedClassName(c.class_name);
+                          setShowTeacherClassPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.optionButtonText, selectedClassId === c.id && styles.optionButtonTextSelected]}>
+                          {c.class_name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            ) : null}
           </>
-        )}
+        ) : null}
+
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor={colors.charcoalMuted}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <PasswordInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={colors.charcoalMuted}
+          value={password}
+          onChangeText={setPassword}
+        />
+        <Pressable style={styles.loginButton} onPress={handleLogin} disabled={loggingIn}>
+          {loggingIn ? <ActivityIndicator color={colors.white} /> : <Text style={styles.loginButtonText}>Log In</Text>}
+        </Pressable>
         <StatusBar style="auto" />
       </View>
     );
   }
   // --- LOGGED IN: route to the right navigator by role ---
-  const handleLogout = () => {
-    setToken(null);
-    setUserRole('');
-    setUserName('');
-    setEmail('');
-    setPassword('');
-    setSelectedRole(null);
-    setSelectedClassId(null);
-    setSelectedClassName('');
-    setLoggedInClass(null);
-    AsyncStorage.removeItem('auth').catch(() => {});
-  };
+  const handleLogout = performLogout;
   if (userRole === 'secretary') {
     return <SecretaryNavigator token={token} onLogout={handleLogout} />;
   }
@@ -886,6 +1060,76 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: fontSizes.base,
     color: colors.charcoal,
+  },
+  inputBox: {
+    width: '100%',
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  inputLabel: {
+    fontFamily: fonts.body,
+    fontSize: fontSizes.base,
+    color: colors.charcoal,
+  },
+  inputPlaceholder: {
+    color: colors.charcoalMuted,
+  },
+  pickerBox: {
+    width: '100%',
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    maxHeight: 220,
+  },
+  inlineErrorWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  inlineErrorText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.sm,
+    color: colors.coral,
+    flex: 1,
+  },
+  retryText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: fontSizes.sm,
+    color: colors.indigo,
+  },
+  optionButton: {
+    width: '100%',
+    backgroundColor: colors.cloud,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  optionButtonSelected: {
+    backgroundColor: colors.indigo,
+    borderColor: colors.indigo,
+  },
+  optionButtonText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: fontSizes.base,
+    color: colors.charcoal,
+  },
+  optionButtonTextSelected: {
+    color: colors.white,
   },
   loginButton: {
     width: '100%',

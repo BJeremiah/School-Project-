@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts, fontSizes, radii, spacing, shadow } from '../../theme/theme';
 import { API_URL } from '../../config/api';
+import PasswordInput from '../../components/PasswordInput';
 
 type ProfileUser = { id: string; name: string; email: string; role: string };
 
@@ -187,6 +188,7 @@ export default function ProfileScreen({
               value={nameDraft}
               onChangeText={setNameDraft}
               placeholder="Your name"
+              placeholderTextColor={colors.charcoalMuted}
             />
             <Pressable style={styles.saveButton} onPress={saveName} disabled={savingName}>
               {savingName ? (
@@ -199,26 +201,28 @@ export default function ProfileScreen({
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Change Password</Text>
-            <TextInput
+            <PasswordInput
               style={styles.input}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               placeholder="Current Password"
-              secureTextEntry
+              placeholderTextColor={colors.charcoalMuted}
             />
-            <TextInput
-              style={[styles.input, { marginTop: spacing.sm }]}
+            <PasswordInput
+              style={styles.input}
+              containerStyle={{ marginTop: spacing.sm }}
               value={newPassword}
               onChangeText={setNewPassword}
               placeholder="New Password"
-              secureTextEntry
+              placeholderTextColor={colors.charcoalMuted}
             />
-            <TextInput
-              style={[styles.input, { marginTop: spacing.sm }]}
+            <PasswordInput
+              style={styles.input}
+              containerStyle={{ marginTop: spacing.sm }}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               placeholder="Confirm New Password"
-              secureTextEntry
+              placeholderTextColor={colors.charcoalMuted}
             />
             {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
             <Pressable style={styles.saveButton} onPress={savePassword} disabled={savingPassword}>

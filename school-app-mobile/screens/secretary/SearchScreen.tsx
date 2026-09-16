@@ -65,6 +65,7 @@ export default function SearchScreen({
           <TextInput
             style={styles.searchInput}
             placeholder="Name or admission number"
+            placeholderTextColor={colors.charcoalMuted}
             value={query}
             onChangeText={setQuery}
             onSubmitEditing={runSearch}

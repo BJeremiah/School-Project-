@@ -165,7 +165,7 @@ export default function FeeSectionsScreen({ token, onBack }: { token: string; on
             {modalError ? <Text style={styles.errorText}>{modalError}</Text> : null}
 
             {!editingSection && (
-              <TextInput style={styles.modalInput} placeholder="Name (e.g. Tuition)" value={name} onChangeText={setName} />
+              <TextInput style={styles.modalInput} placeholder="Name (e.g. Tuition)" placeholderTextColor={colors.charcoalMuted} value={name} onChangeText={setName} />
             )}
             {editingSection && (
               <Text style={styles.lockedName}>{editingSection.name} (name can't be changed)</Text>
@@ -173,6 +173,7 @@ export default function FeeSectionsScreen({ token, onBack }: { token: string; on
             <TextInput
               style={styles.modalInput}
               placeholder="Amount"
+              placeholderTextColor={colors.charcoalMuted}
               value={amount}
               onChangeText={setAmount}
               keyboardType="decimal-pad"
